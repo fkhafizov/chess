@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Граф пар ходов — шахматный этюд</title>
+<style>
+:root{
+  --bg:#ffffff;--fg:#1d2430;--muted:#5d6774;--line:#d9dee5;--panel:#f6f8fa;--accent:#2563eb;
+  --green:#2ea043;--greenfill:#8ce29b;--red:#d1242f;--redfill:#ff9ea4;--gray:#8b949e;--grayfill:#e2e5e9;
+  --edge:#7a8594;--lightsq:#f0d9b5;--darksq:#b58863;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1319;--fg:#e6e9ee;--muted:#9aa4b1;--line:#2b323c;--panel:#171c24;--accent:#7aa2ff;
+  --greenfill:#2f8f47;--redfill:#b93a44;--grayfill:#3a414b;--edge:#8a94a3;}}
+:root[data-theme="dark"]{--bg:#0f1319;--fg:#e6e9ee;--muted:#9aa4b1;--line:#2b323c;--panel:#171c24;--accent:#7aa2ff;
+  --greenfill:#2f8f47;--redfill:#b93a44;--grayfill:#3a414b;--edge:#8a94a3;}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1280px;margin:0 auto;padding:16px 16px 40px}
+h1{font-size:1.5rem;margin:0 0 6px}
+p{margin:0 0 10px;max-width:none}
+.muted{color:var(--muted)}
+.controls{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:end;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;margin:12px 0}
+.controls label{display:flex;flex-direction:column;gap:3px;font-size:.85rem;color:var(--muted)}
+.controls input,.controls select{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
+label.fenlab{flex:1 1 300px;min-width:280px}
+#fen{width:100%;height:34px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chk{flex-direction:row!important;align-items:center;gap:6px!important;color:var(--fg)!important}
+button{font:inherit;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:8px;padding:7px 14px;cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button:disabled{opacity:.5;cursor:default}
+.status{font-size:.9rem;min-height:1.4em;margin:4px 0 10px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.85rem;color:var(--muted);margin-bottom:8px}
+.legend span::before{content:"";display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:5px;vertical-align:-1px;border:2px solid}
+.legend .g::before{background:var(--greenfill);border-color:var(--green)}
+.legend .r::before{background:var(--redfill);border-color:var(--red)}
+.legend .s::before{background:var(--grayfill);border-color:var(--gray)}
+.legend .c::before{background:transparent;border-color:var(--gray);border-style:dashed}
+.main{display:grid;grid-template-columns:1fr 280px;gap:14px}
+@media (max-width:820px){.main{grid-template-columns:1fr}}
+#graphbox{border:1px solid var(--line);border-radius:10px;background:var(--panel);height:70vh;min-height:360px;overflow:hidden;touch-action:none;position:relative}
+#graph{width:100%;height:100%;display:block;cursor:grab}
+#graph:active{cursor:grabbing}
+.side{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:12px;font-size:.9rem}
+.side h3{margin:0 0 8px;font-size:1rem}
+#board{width:100%;max-width:260px;display:block;margin:0 auto 10px}
+#line{word-break:break-word}
+.node circle{stroke-width:2}
+.node.pos circle{fill:var(--greenfill);stroke:var(--green)}
+.node.mate circle{fill:var(--redfill);stroke:var(--red)}
+.node.stale circle{fill:var(--grayfill);stroke:var(--gray)}
+.node.cut circle{fill:transparent;stroke:var(--gray);stroke-dasharray:3 2}
+.node.sel circle{stroke:var(--accent);stroke-width:4}
+.node{cursor:pointer}
+.node circle.hit{fill:transparent!important;stroke:none!important}
+.elabel{font-size:11px;fill:var(--fg);text-anchor:middle;pointer-events:none;font-family:ui-monospace,Menlo,Consolas,monospace}
+.edge{stroke:var(--edge);stroke-width:1.2;fill:none}
+.edge.mate{stroke:var(--red);stroke-width:1.6}
+dialog{border:1px solid var(--line);border-radius:12px;max-width:720px;width:92vw;background:var(--bg);color:var(--fg);padding:20px}
+dialog::backdrop{background:rgba(0,0,0,.4)}
+dialog h2{margin:0 0 10px;font-size:1.2rem}
+dialog ul{padding-left:20px}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.9em;background:var(--panel);padding:1px 4px;border-radius:4px}
+a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Граф пар ходов (ход белых, ответ чёрных)</h1>
+<p>Каждая вершина — позиция, в которой ход белых. Каждое ребро — пара ходов: ход белых и ответ чёрных. Если ход белых ставит мат, ребро заканчивается в красной вершине (ответа чёрных нет). Глубина любого пути не превышает <b>N</b> рёбер. Удобная аналогия: это <b>И–ИЛИ дерево</b> — белым достаточно найти <i>один</i> хороший ход (ИЛИ), но затем они обязаны справиться с <i>каждым</i> ответом чёрных (И).</p>
+
+<div class="controls">
+  <label class="fenlab">FEN позиции (ход белых)<input id="fen" value="8/2K1pp2/4P3/4B1p1/3P2k1/8/2B3P1/7R w - - 0 1"></label>
+  <label>N (макс. рёбер на пути)<input id="depth" type="number" min="1" max="20" value="3" style="width:80px"></label>
+  <label>Режим<select id="mode">
+    <option value="forced">Только форсированный мат ≤ N</option>
+    <option value="limited">Полное дерево с лимитом вершин</option>
+    <option value="full">Полное дерево без обрезки</option>
+  </select></label>
+  <label class="chk"><input id="shortest" type="checkbox" checked> только кратчайшие маты</label>
+  <label>Лимит вершин<input id="limit" type="number" min="50" max="100000" value="3000" style="width:100px"></label>
+  <div class="row">
+    <button id="start" class="primary">Start</button>
+    <button id="reset">Reset</button>
+    <button id="help">Help</button>
+  </div>
+</div>
+<div class="status" id="status">Нажмите Start.</div>
+<div class="legend"><span class="g">позиция (ход белых)</span><span class="r">мат после хода белых</span><span class="s">пат</span><span class="c">обрезано (лимит)</span></div>
+
+<div class="main">
+  <div id="graphbox"><svg id="graph" xmlns="http://www.w3.org/2000/svg"></svg></div>
+  <div class="side">
+    <h3>Позиция</h3>
+    <svg id="board" viewBox="0 0 8 8"></svg>
+    <div id="line" class="muted">Нажмите на вершину, чтобы увидеть позицию и путь к ней.</div>
+  </div>
+</div>
+</div>
+
+<dialog id="helpdlg">
+<h2>Как пользоваться</h2>
+<ul>
+<li><b>Вершины</b> — позиции с ходом белых (зелёные). <b>Красная</b> вершина — позиция после матующего хода белых; у такого ребра только ход белых. <b>Серая</b> — пат (ход белых привёл к пату). <b>Пунктирная</b> — вершина не раскрыта из-за лимита.</li>
+<li><b>Ребро</b> подписано парой <code>ход белых, ответ чёрных</code> в короткой нотации (SAN); подпись стоит над вершиной, в которую ведёт ребро. Белые ходы в корне нумеруются как ход 1.</li>
+<li><b>N</b> — максимальное число рёбер на любом пути от корня, т.е. мат должен случиться не позже N-го хода белых. Допустимо N от 1 до 20.</li>
+<li><b>Режимы.</b>
+  <ul>
+  <li><i>Только форсированный мат ≤ N</i> (по умолчанию). Показываются лишь те ходы белых, после которых мат форсирован не позднее N-го хода <i>при любой</i> защите чёрных; все ответы чёрных показываются. Это ровно решение задачи «мат в N ходов». Флажок <i>только кратчайшие маты</i> (включён по умолчанию) оставляет в каждой позиции только ходы, матующие за минимальное число ходов (убирает «дуали» и медленные пути); поиск при этом идёт с постепенным углублением и быстр даже при N = 20. Без флажка показываются <i>все</i> матующие ходы ≤ N — это требует полного перебора на глубину N и при N ≥ 4 занимает десятки секунд.</li>
+  <li><i>Полное дерево с лимитом вершин.</i> Все легальные ходы обеих сторон, обход в ширину; когда число вершин достигает лимита, оставшиеся вершины помечаются пунктиром. Полное дерево растёт как ≈150<sup>N</sup>, поэтому лимит почти всегда срабатывает уже при N = 2.</li>
+  <li><i>Полное дерево без обрезки.</i> То же, но без лимита — только для очень малых N (при N ≥ 3 это миллионы вершин, браузер может зависнуть).</li>
+  </ul></li>
+<li><b>Лимит вершин</b> действует во всех режимах кроме «без обрезки»; поиск также прерывается после 5·10<sup>6</sup> узлов или 120 с.</li>
+<li><b>Start</b> — построить граф; <b>Reset</b> — очистить граф и вернуть параметры по умолчанию; <b>Help</b> — это окно.</li>
+<li><b>Навигация:</b> перетаскивание — панорама, колёсико / щипок — масштаб, двойной щелчок — вписать граф в окно. Щелчок по вершине показывает диаграмму, путь от корня и ссылку на lichess.</li>
+<li>Правила реализованы внутри файла (без библиотек): все фигуры, взятие на проходе, превращение (в Q, R, B, N). Рокировка не поддерживается — в этюдах такого рода она не нужна.</li>
+</ul>
+<div class="row" style="justify-content:flex-end"><button id="closehelp" class="primary">Закрыть</button></div>
+</dialog>
+
+<script id="engine" type="text/plain">
+// ---------- Chess engine (no castling) ----------
+const FILES='abcdefgh';
+const sqName=s=>FILES[s&7]+((s>>3)+1);
+const sqIdx=n=>(n.charCodeAt(0)-97)+((+n[1])-1)*8;
+function parseFen(fen){const t=fen.trim().split(/\s+/);const b=new Array(64).fill('');let r=7,f=0;
+ for(const ch of t[0]){if(ch==='/'){r--;f=0;}else if(ch>='1'&&ch<='8')f+=+ch;else{b[r*8+f]=ch;f++;}}
+ const ep=t[3]&&t[3]!=='-'?sqIdx(t[3]):-1;return{b,turn:t[1]==='b'?'b':'w',ep};}
+function toFen(p){let s='';for(let r=7;r>=0;r--){let e=0;for(let f=0;f<8;f++){const c=p.b[r*8+f];if(!c)e++;else{if(e){s+=e;e=0;}s+=c;}}if(e)s+=e;if(r)s+='/';}
+ return s+' '+p.turn+' - '+(p.ep>=0?sqName(p.ep):'-');}
+const KN=[[1,2],[2,1],[-1,2],[-2,1],[1,-2],[2,-1],[-1,-2],[-2,-1]];
+const KG=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+const DIAG=[[1,1],[1,-1],[-1,1],[-1,-1]],ORTH=[[1,0],[-1,0],[0,1],[0,-1]];
+const isW=c=>c!==''&&c===c.toUpperCase();
+function attacked(b,sq,byWhite){const r=sq>>3,f=sq&7;const lc=byWhite?x=>x:x=>x.toLowerCase();
+ const P=lc('P'),N=lc('N'),B=lc('B'),R=lc('R'),Q=lc('Q'),K=lc('K');const pr=byWhite?r-1:r+1;
+ if(pr>=0&&pr<8){if(f>0&&b[pr*8+f-1]===P)return true;if(f<7&&b[pr*8+f+1]===P)return true;}
+ for(const[dr,df]of KN){const rr=r+dr,ff=f+df;if(rr>=0&&rr<8&&ff>=0&&ff<8&&b[rr*8+ff]===N)return true;}
+ for(const[dr,df]of KG){const rr=r+dr,ff=f+df;if(rr>=0&&rr<8&&ff>=0&&ff<8&&b[rr*8+ff]===K)return true;}
+ for(const[dr,df]of DIAG){let rr=r+dr,ff=f+df;while(rr>=0&&rr<8&&ff>=0&&ff<8){const c=b[rr*8+ff];if(c){if(c===B||c===Q)return true;break;}rr+=dr;ff+=df;}}
+ for(const[dr,df]of ORTH){let rr=r+dr,ff=f+df;while(rr>=0&&rr<8&&ff>=0&&ff<8){const c=b[rr*8+ff];if(c){if(c===R||c===Q)return true;break;}rr+=dr;ff+=df;}}
+ return false;}
+function kingSq(b,white){const k=white?'K':'k';for(let i=0;i<64;i++)if(b[i]===k)return i;return -1;}
+function inCheck(p){const w=p.turn==='w';const k=kingSq(p.b,w);return k>=0&&attacked(p.b,k,!w);}
+function pseudo(p){const b=p.b,w=p.turn==='w',ms=[];
+ const own=c=>c&&isW(c)===w,enemy=c=>c&&isW(c)!==w;
+ const add=(from,to,piece,extra)=>ms.push(Object.assign({from,to,piece,capt:b[to]||''},extra||{}));
+ for(let sq=0;sq<64;sq++){const c=b[sq];if(!own(c))continue;const r=sq>>3,f=sq&7,u=c.toUpperCase();
+  if(u==='P'){const dir=w?1:-1,start=w?1:6,last=w?7:0;const r1=r+dir;
+   const push=(to,extra)=>{if((to>>3)===last)for(const q of['Q','R','B','N'])add(sq,to,c,Object.assign({promo:w?q:q.toLowerCase()},extra));else add(sq,to,c,extra);};
+   if(r1>=0&&r1<8&&!b[r1*8+f]){push(r1*8+f);if(r===start&&!b[(r+2*dir)*8+f])add(sq,(r+2*dir)*8+f,c,{dbl:true});}
+   for(const df of[-1,1]){const ff=f+df;if(ff<0||ff>7||r1<0||r1>7)continue;const to=r1*8+ff;
+    if(enemy(b[to]))push(to);else if(to===p.ep)add(sq,to,c,{ep:true,capt:w?'p':'P'});}
+  }else if(u==='N'||u==='K'){for(const[dr,df]of(u==='N'?KN:KG)){const rr=r+dr,ff=f+df;if(rr<0||rr>7||ff<0||ff>7)continue;const to=rr*8+ff;if(!own(b[to]))add(sq,to,c);}}
+  else{const dirs=u==='B'?DIAG:u==='R'?ORTH:KG;for(const[dr,df]of dirs){let rr=r+dr,ff=f+df;while(rr>=0&&rr<8&&ff>=0&&ff<8){const to=rr*8+ff;if(own(b[to]))break;add(sq,to,c);if(b[to])break;rr+=dr;ff+=df;}}}
+ }return ms;}
+function make(p,m){const b=p.b.slice();b[m.from]='';b[m.to]=m.promo||m.piece;
+ if(m.ep)b[(m.from>>3)*8+(m.to&7)]='';
+ return{b,turn:p.turn==='w'?'b':'w',ep:m.dbl?(m.from+m.to)/2:-1};}
+function legal(p){const w=p.turn==='w';return pseudo(p).filter(m=>{const c=make(p,m);const k=kingSq(c.b,w);return k>=0&&!attacked(c.b,k,!w);});}
+function san(p,m,all){const u=m.piece.toUpperCase();let s='';
+ if(u==='P'){if(m.capt)s=FILES[m.from&7]+'x';s+=sqName(m.to);if(m.promo)s+='='+m.promo.toUpperCase();}
+ else{s=u;const others=all.filter(o=>o!==m&&o.piece===m.piece&&o.to===m.to);
+  if(others.length){const sf=others.some(o=>(o.from&7)===(m.from&7)),sr=others.some(o=>(o.from>>3)===(m.from>>3));
+   if(!sf)s+=FILES[m.from&7];else if(!sr)s+=(m.from>>3)+1;else s+=sqName(m.from);}
+  if(m.capt)s+='x';s+=sqName(m.to);}
+ const c=make(p,m);if(inCheck(c))s+=legal(c).length?'+':'#';return s;}
+
+// ---------- Search & graph building ----------
+const INF=1e9;
+function runSearch(opts,progress){
+ const{fen,N,mode,limit,shortest}=opts;const root=parseFen(fen);
+ if(root.turn!=='w')throw new Error('В позиции должен быть ход белых.');
+ if(kingSq(root.b,true)<0||kingSq(root.b,false)<0)throw new Error('На доске должны быть оба короля.');
+ if(attacked(root.b,kingSq(root.b,false),true))throw new Error('Чёрный король под шахом при ходе белых — позиция нелегальна.');
+ const t0=Date.now(),NODE_BUDGET=5e6,TIME_BUDGET=120000;let searchNodes=0;const memo=new Map();
+ const tick=()=>{searchNodes++;if((searchNodes&16383)===0){if(searchNodes>NODE_BUDGET)throw new Error('Превышен бюджет поиска (5·10⁶ узлов).');if(Date.now()-t0>TIME_BUDGET)throw new Error('Превышен лимит времени (120 с).');progress&&progress(searchNodes,nodes.length);}};
+ const nodes=[];let mates=0,stales=0,cuts=0;
+ const addNode=(parent,fen,kind,depth,w,bl)=>{const id=nodes.length;nodes.push({id,parent,fen,kind,depth,w,bl});if(kind==='mate')mates++;if(kind==='stale')stales++;if(kind==='cut')cuts++;return id;};
+ // children of a white-to-move position, ordered: mates first, then fewest replies
+ function expand(p){const ms=legal(p);return ms.map(m=>{const c=make(p,m);const reps=legal(c);return{m,c,reps,chk:reps.length===0&&inCheck(c),ms};})
+  .sort((a,b)=>(b.chk-a.chk)||(a.reps.length-b.reps.length));}
+ const wsan=(p,x)=>san(p,x.m,x.ms);
+ function mateDepth(p,d){const key=toFen(p);const e=memo.get(key);if(e&&(e.val<INF||e.bound>=d))return e.val;tick();
+  let best=INF;for(const x of expand(p)){const v=moveValue(x,Math.min(d,best-1));if(v<best)best=v;if(best===1)break;}
+  memo.set(key,{bound:d,val:best});return best;}
+ function moveValue(x,d){if(d<1)return INF;if(x.reps.length===0)return x.chk?1:INF;if(d<2)return INF;let worst=1;
+  for(const r of x.reps){const v=mateDepth(make(x.c,r),d-1);if(v===INF)return INF;if(v+1>worst)worst=v+1;}return worst;}
+
+ if(mode==='forced'){
+  const mateID=(p,d)=>{for(let k=1;k<=d;k++){const v=mateDepth(p,k);if(v<INF)return v;}return INF;};
+  const buildF=(p,d,parent,depth)=>{if(d<1)return;const best=shortest?mateID(p,d):mateDepth(p,d);if(best===INF){if(parent<0)throw new Error('Форсированного мата не позднее '+N+'-го хода нет. Увеличьте N.');return;}
+   for(const x of expand(p)){const bound=shortest?best:d;const v=moveValue(x,bound);if(v===INF||(shortest&&v!==best))continue;
+    if(x.reps.length===0){addNode(parent,toFen(x.c),'mate',depth+1,wsan(p,x),'');continue;}
+    for(const r of x.reps){const g=make(x.c,r);if(nodes.length>=limit){addNode(parent,toFen(g),'cut',depth+1,wsan(p,x),san(x.c,r,x.reps));continue;}
+     const id=addNode(parent,toFen(g),'pos',depth+1,wsan(p,x),san(x.c,r,x.reps));buildF(g,d-1,id,depth+1);}}};
+  addNode(-1,toFen(root),'pos',0,'','');buildF(root,N,0,0);
+ }else{
+  const lim=mode==='full'?Infinity:limit;const q=[];addNode(-1,toFen(root),'pos',0,'','');q.push({p:root,id:0,depth:0});
+  while(q.length){const{p,id,depth}=q.shift();if(depth>=N)continue;tick();
+   if(nodes.length>=lim){nodes[id].kind='cut';cuts++;continue;}
+   for(const x of expand(p)){
+    if(x.reps.length===0){addNode(id,toFen(x.c),x.chk?'mate':'stale',depth+1,wsan(p,x),'');continue;}
+    for(const r of x.reps){const g=make(x.c,r);const cid=addNode(id,toFen(g),'pos',depth+1,wsan(p,x),san(x.c,r,x.reps));q.push({p:g,id:cid,depth:depth+1});}}}
+ }
+ return{nodes,stats:{searchNodes,ms:Date.now()-t0,mates,stales,cuts,memo:memo.size}};
+}
+</script>
+
+<script>
+const $=id=>document.getElementById(id);
+const DEF={fen:'8/2K1pp2/4P3/4B1p1/3P2k1/8/2B3P1/7R w - - 0 1',depth:3,mode:'forced',shortest:true,limit:3000};
+const engineSrc=$('engine').textContent;
+new Function(engineSrc+';window.__runSearch=runSearch;window.__parseFen=parseFen;')();
+let worker=null,running=false,tree=null,layout=null,selected=-1;
+
+// ---------- Run ----------
+function setStatus(t){$('status').textContent=t;}
+function startRun(){if(running)return;
+ const opts={fen:$('fen').value.trim(),N:Math.max(1,Math.min(20,+$('depth').value||3)),mode:$('mode').value,shortest:$('shortest').checked,limit:Math.max(50,+$('limit').value||3000)};
+ $('depth').value=opts.N;
+ if(opts.mode==='full'&&opts.N>=3&&!confirm('Полное дерево без обрезки при N ≥ 3 — это миллионы вершин. Продолжить?'))return;
+ try{window.__parseFen(opts.fen);}catch(e){setStatus('Некорректный FEN');return;}
+ running=true;$('start').disabled=true;setStatus('Идёт расчёт…');clearGraph();
+ const onDone=res=>{running=false;$('start').disabled=false;tree=res.nodes;render(res);};
+ const onErr=msg=>{running=false;$('start').disabled=false;setStatus('Ошибка: '+msg);};
+ try{
+  const blob=new Blob([engineSrc,';onmessage=e=>{try{const r=runSearch(e.data,(s,n)=>postMessage({type:"p",s,n}));postMessage({type:"done",res:r});}catch(err){postMessage({type:"err",msg:err.message});}};'],{type:'text/javascript'});
+  worker=new Worker(URL.createObjectURL(blob));
+  worker.onmessage=e=>{const d=e.data;if(d.type==='p')setStatus(`Идёт расчёт… узлов поиска: ${d.s.toLocaleString()}, вершин: ${d.n}`);else if(d.type==='done'){onDone(d.res);worker.terminate();worker=null;}else{onErr(d.msg);worker.terminate();worker=null;}};
+  worker.onerror=()=>{worker.terminate();worker=null;runInline(opts,onDone,onErr);};
+  worker.postMessage(opts);
+ }catch(e){runInline(opts,onDone,onErr);}
+}
+function runInline(opts,onDone,onErr){setTimeout(()=>{try{onDone(window.__runSearch(opts,null));}catch(e){onErr(e.message);}},30);}
+function resetAll(){if(worker){worker.terminate();worker=null;}running=false;$('start').disabled=false;
+ $('fen').value=DEF.fen;$('depth').value=DEF.depth;$('mode').value=DEF.mode;$('shortest').checked=DEF.shortest;$('limit').value=DEF.limit;
+ clearGraph();setStatus('Нажмите Start.');}
+function clearGraph(){tree=null;layout=null;selected=-1;$('graph').innerHTML='';$('board').innerHTML='';$('line').textContent='Нажмите на вершину, чтобы увидеть позицию и путь к ней.';}
+$('start').onclick=startRun;$('reset').onclick=resetAll;$('help').onclick=()=>$('helpdlg').showModal();$('closehelp').onclick=()=>$('helpdlg').close();
+
+// ---------- Layout & render ----------
+const XS=84,YS=96,RAD=7;
+function render(res){const nodes=res.nodes;const kids=nodes.map(()=>[]);nodes.forEach(n=>{if(n.parent>=0)kids[n.parent].push(n.id);});
+ const leaves=new Array(nodes.length).fill(0);
+ for(let i=nodes.length-1;i>=0;i--)leaves[i]=kids[i].length?kids[i].reduce((s,k)=>s+leaves[k],0):1;
+ const x=new Array(nodes.length).fill(0);
+ (function place(id,x0){if(!kids[id].length){x[id]=x0+0.5;return;}let cur=x0;for(const k of kids[id]){place(k,cur);cur+=leaves[k];}x[id]=(x[kids[id][0]]+x[kids[id][kids[id].length-1]])/2;})(0,0);
+ layout={x,kids};
+ const svg=$('graph');let s='<g id="view">';
+ for(const n of nodes){if(n.parent<0)continue;const p=nodes[n.parent];const x1=x[p.id]*XS,y1=p.depth*YS,x2=x[n.id]*XS,y2=n.depth*YS,ym=(y1+y2)/2;
+  s+=`<path class="edge ${n.kind==='mate'?'mate':''}" d="M${x1},${y1+RAD} C${x1},${ym} ${x2},${ym} ${x2},${y2-RAD}"/>`;
+  const lab=(n.depth===1?'1.':'')+n.w+(n.bl?', '+n.bl:'');
+  s+=`<text class="elabel" x="${x2}" y="${y2-RAD-5}">${lab}</text>`;}
+ const cls={pos:'pos',mate:'mate',stale:'stale',cut:'cut'};
+ for(const n of nodes)s+=`<g class="node ${cls[n.kind]}" data-id="${n.id}"><circle class="hit" cx="${x[n.id]*XS}" cy="${n.depth*YS}" r="${RAD*2.6}"/><circle cx="${x[n.id]*XS}" cy="${n.depth*YS}" r="${RAD}"/></g>`;
+ svg.innerHTML=s+'</g>';
+ const edges=nodes.length-1,maxd=Math.max(...nodes.map(n=>n.depth));
+ setStatus(`Вершин: ${nodes.length}, рёбер: ${edges}, матов: ${res.stats.mates}${res.stats.stales?', патов: '+res.stats.stales:''}${res.stats.cuts?', обрезано: '+res.stats.cuts:''}, макс. глубина: ${maxd}. Узлов поиска: ${res.stats.searchNodes.toLocaleString()}, время: ${(res.stats.ms/1000).toFixed(1)} с.`);
+ fitView();selectNode(0);
+}
+// pan/zoom
+let vb={x:0,y:0,w:800,h:600};const svg=$('graph');
+function applyVB(){svg.setAttribute('viewBox',`${vb.x} ${vb.y} ${vb.w} ${vb.h}`);}
+function fitView(){if(!layout)return;const xs=layout.x.map(v=>v*XS);const maxd=Math.max(...tree.map(n=>n.depth));
+ const minx=Math.min(...xs)-50,maxx=Math.max(...xs)+50,miny=-40,maxy=maxd*YS+40;const r=svg.getBoundingClientRect();
+ const w=maxx-minx,h=maxy-miny;const k=Math.max(w/r.width,h/r.height,0.6);vb={x:minx-(k*r.width-w)/2,y:miny-(k*r.height-h)/2,w:k*r.width,h:k*r.height};applyVB();}
+const ptrs=new Map();let lastDist=0,moved=false;
+svg.addEventListener('pointerdown',e=>{svg.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});moved=false;});
+svg.addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId))return;const r=svg.getBoundingClientRect(),k=vb.w/r.width;const prev=ptrs.get(e.pointerId);
+ if(ptrs.size===1){vb.x-=(e.clientX-prev.x)*k;vb.y-=(e.clientY-prev.y)*k;if(Math.abs(e.clientX-prev.x)+Math.abs(e.clientY-prev.y)>2)moved=true;applyVB();}
+ ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ if(ptrs.size===2){const [a,b]=[...ptrs.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);if(lastDist)zoomAt((a.x+b.x)/2,(a.y+b.y)/2,lastDist/d);lastDist=d;moved=true;}});
+const up=e=>{ptrs.delete(e.pointerId);if(ptrs.size<2)lastDist=0;};svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);
+function zoomAt(cx,cy,f){const r=svg.getBoundingClientRect();const px=vb.x+(cx-r.left)/r.width*vb.w,py=vb.y+(cy-r.top)/r.height*vb.h;
+ vb.w*=f;vb.h*=f;vb.x=px-(cx-r.left)/r.width*vb.w;vb.y=py-(cy-r.top)/r.height*vb.h;applyVB();}
+svg.addEventListener('wheel',e=>{e.preventDefault();zoomAt(e.clientX,e.clientY,e.deltaY>0?1.15:1/1.15);},{passive:false});
+svg.addEventListener('dblclick',fitView);
+svg.addEventListener('click',e=>{if(moved)return;const g=e.target.closest('.node');if(g)selectNode(+g.dataset.id);});
+window.addEventListener('resize',()=>{if(layout)fitView();});
+
+// ---------- Board & line ----------
+const GLYPH={K:'♔',Q:'♕',R:'♖',B:'♗',N:'♘',P:'♙',k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟'};
+function selectNode(id){selected=id;document.querySelectorAll('.node.sel').forEach(g=>g.classList.remove('sel'));
+ const g=document.querySelector(`.node[data-id="${id}"]`);if(g)g.classList.add('sel');
+ const n=tree[id];const p=window.__parseFen(n.fen);let s='';
+ for(let r=7;r>=0;r--)for(let f=0;f<8;f++){const dark=(r+f)%2===0;s+=`<rect x="${f}" y="${7-r}" width="1" height="1" fill="${dark?'var(--darksq)':'var(--lightsq)'}"/>`;
+  const c=p.b[r*8+f];if(c)s+=`<text x="${f+0.5}" y="${7-r+0.78}" font-size="0.82" text-anchor="middle" fill="${c===c.toUpperCase()?'#fff':'#111'}" stroke="${c===c.toUpperCase()?'#111':'none'}" stroke-width="0.03" style="font-family:'Segoe UI Symbol','DejaVu Sans','Apple Symbols',serif">${GLYPH[c]}</text>`;}
+ $('board').innerHTML=s;
+ const path=[];for(let k=n;k.parent>=0;k=tree[k.parent])path.unshift(k);
+ let line=path.map((k,i)=>`${i+1}.${k.w}${k.bl?' '+k.bl:''}`).join(' ');
+ const kindTxt={pos:'ход белых',mate:'<b style="color:var(--red)">мат</b>',stale:'пат',cut:'не раскрыта (лимит)'}[n.kind];
+ const full=n.fen+' 0 1';
+ $('line').innerHTML=`<div><b>Глубина:</b> ${n.depth} — ${kindTxt}</div><div><b>Путь:</b> ${line||'начальная позиция'}</div><div class="muted" style="font-size:.8rem;word-break:break-all"><code>${full}</code></div><div><a href="https://lichess.org/analysis/${full.replace(/ /g,'_')}" target="_blank" rel="noopener">Открыть на lichess ↗</a></div>`;}
+</script>
+</body>
+</html>
