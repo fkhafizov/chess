@@ -3,6 +3,7 @@
 
 
 * https://fkhafizov.github.io/chess/chess-study-en.html
+* https://fkhafizov.github.io/chess/chess-study-en-v2.html
 * https://fkhafizov.github.io/chess/chess-study-ru-v1.html
 * https://fkhafizov.github.io/chess/chess-study-ru-v0.html
 
