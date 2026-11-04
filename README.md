@@ -1,6 +1,10 @@
 # chess 2026.10.13
 
+* https://fkhafizov.github.io/chess/
+* https://fkhafizov.github.io/chess/index.html
 
+----------
+  
 2026.11.03	"chess demo with claude
 - Write a nice JS/html single file application
 - Нарисуй граф возможных пар ходов для игры в шахматы начиная с этой позиции
