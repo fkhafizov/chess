@@ -1,6 +1,13 @@
 # chess 2026.10.13
 
 
+2026.11.03	"chess demo with claude
+- Write a nice JS/html single file application
+- Нарисуй граф возможных пар ходов для игры в шахматы начиная с этой позиции
+* https://lichess.org/editor/8/2K1pp2/4P3/4B1p1/3P2k1/8/2B3P1/7R_w_-_-_0_1"
+* https://claude.ai/chat/d710bba5-289f-453f-8dc1-a200903dbbd2?artifact=b45b3846-a305-43c0-a0d0-8986a3d3aa29
+
+-----------
 
 * https://fkhafizov.github.io/chess/chess-study-en.html
 * https://fkhafizov.github.io/chess/chess-study-en-v2.html
